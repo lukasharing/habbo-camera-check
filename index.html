@@ -19,13 +19,9 @@
         <li><strong>Red</strong> (#FF0000): No constraint.</li>
       </ul>
       <strong>Isometric Check</strong> (on cropped + zoomed):
-      <ul>
-        <li>Detect edges using Sobel.</li>
-        <li>Measure angles near 30°, 150°, 210°, 330° (±15° tolerance).</li>
-      </ul>
       <strong>Face Check</strong> (on cropped + zoomed):
       <ul>
-        <li>Detect by using sliding window on sobel.</li>
+        <li>Detect by using sliding window.</li>
       </ul>
     </p>
   </details>
@@ -39,17 +35,13 @@
     </label>
     <br><br>
 
-    <!-- Coordinates + Zoom -->
-    <label>Zoom:</label>
-    <input type="number" id="zoomInput" value="1" step="0.1" min="0.1" />
-    <br><br>
-
-    <button type="button" id="processBtn">Process</button>
   </div>
 
   <!-- Draggable “photo” box on top of camera background -->
   <div class="camera-container" id="cameraContainer">
-    <div id="dragBox"></div>
+    <div id="dragBox">
+      <button type="button" id="processBtn">Process</button>
+    </div>
   </div>
 
   <!-- Display canvases in a container -->
@@ -59,12 +51,12 @@
       <canvas id="outputCanvas"></canvas>
     </div>
     <div>
-      <h3>Sobel Edge Map</h3>
-      <canvas id="sobelCanvas"></canvas>
+      <h3>Black and White Map</h3>
+      <canvas id="bwCanvas"></canvas>
     </div>
     <div>
-      <h3>Sobel Face Map</h3>
-      <canvas id="sobelFace"></canvas>
+      <h3>Face Map</h3>
+      <canvas id="faceCanvas"></canvas>
     </div>
   </div>
 

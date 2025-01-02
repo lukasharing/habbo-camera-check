@@ -2,14 +2,15 @@
 // DOM Refs
 // ----------------------------------------------------
 const imageInput      = document.getElementById('imageInput');
-const zoomInput       = document.getElementById('zoomInput');
-const fixedSizeInput  = document.getElementById('fixedSize');
 
 const outputCanvas    = document.getElementById('outputCanvas');
 const outputCtx       = outputCanvas.getContext('2d');
-const sobelCanvas     = document.getElementById('sobelCanvas');
-const sobelCtx        = sobelCanvas.getContext('2d');
-const sobelFaceCanvas = document.getElementById('sobelFace');
+
+const bwCanvas        = document.getElementById('bwCanvas');
+const bwCtx           = bwCanvas.getContext('2d');
+
+const faceCanvas      = document.getElementById('faceCanvas');
+const faceCtx         = faceCanvas.getContext('2d');
 
 const isoCheckResult  = document.getElementById('isoCheckResult');
 const faceCheckResult = document.getElementById('faceCheckResult');
@@ -19,7 +20,7 @@ const dragBox         = document.getElementById('dragBox');
 
 // This “face mask edges” image is used for the face overlap check
 const faceMaskImg  = new Image();
-faceMaskImg.src    = 'image/faceMaskEdges.jpg'; // or your path
+faceMaskImg.src    = 'image/faceMask.jpg'; // or your path
 let faceMaskLoaded = false;
 faceMaskImg.onload = () => {
     faceMaskLoaded = true;
@@ -33,6 +34,31 @@ let boxY      = 0;
 let offsetX   = 0;
 let offsetY   = 0;
 let dragStart = false;
+
+
+function toBlackAndWhite(imageData, threshold = 1) {
+    const { width, height, data } = imageData;
+    const bwImageData = new ImageData(width, height);
+
+    for (let i = 0; i < data.length; i += 4) {
+        // Convert RGB to grayscale
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Apply threshold
+        const value = gray >= threshold ? 255 : 0;
+
+        // Set pixel to black or white
+        bwImageData.data[i] = value;     // Red channel
+        bwImageData.data[i + 1] = value; // Green channel
+        bwImageData.data[i + 2] = value; // Blue channel
+        bwImageData.data[i + 3] = 255;   // Alpha channel (fully opaque)
+    }
+
+    return bwImageData;
+}
 
 /**
  * 1) Utility: Load file as an Image
@@ -101,7 +127,7 @@ function getSobelDataPixelArt(imageData) {
     }
 
     // 4) Binarize edge map for quick display
-    const threshold = 8;
+    const threshold = 99;
     const edgeData = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < magArr.length; i++) {
         let val = (magArr[i] / maxMag) * 255;
@@ -121,101 +147,255 @@ function getSobelDataPixelArt(imageData) {
     };
 }
 
-/**
- * 3) Isometric check
- */
-function getIsometricScore(magArr, angArr, width, height, threshold = 20) {
-    let totalEdges = 0, isoEdges = 0;
-    for (let i = 0; i < magArr.length; i++) {
-        if (magArr[i] > threshold) {
-            totalEdges++;
-            const angle = angArr[i];
-            if (isIsometricAngle(angle, 8)) {
-                isoEdges++;
+function getIndex(x, y, width) {
+    return y * width + x;
+}
+
+function isBlack(x, y, data, width, height) {
+    if (x < 0 || x >= width || y < 0 || y >= height) return false;
+    const index = getIndex(x, y, width) * 4; // RGBA
+    return data[index] === 0; // black => R=0
+}
+
+function isBlob(x, y, data, width, height){
+    return isBlack(x + 1, y, data, width, height) && isBlack(x - 1, y, data, width, height) && isBlack(x, y + 1, data, width, height) && isBlack(x, y, data, width, height);
+}
+
+function findHorizontalLines(bwImageData, minLength) {
+    const { width, height, data } = bwImageData;
+    const lines = [];
+  
+    // For each row, find continuous runs of black pixels
+    for (let y = 0; y < height; y++) {
+      let x = 0;
+      while (x < width) {
+        if (isBlack(x, y, data, width, height)) {
+          const startX = x;
+          // Move forward until we find a non-black pixel
+          while (x < width && isBlack(x, y, data, width, height)) {
+            x++;
+          }
+          const endX = x - 1;
+          const runLength = endX - startX + 1;
+          if (runLength >= minLength) {
+            // Build the segment as an array of points
+            const segment = [];
+            for (let col = startX; col <= endX; col++) {
+              segment.push({ x: col, y });
             }
+            lines.push(segment);
+          }
+        } else {
+          x++;
+        }
+      }
+    }
+  
+    return lines;
+}
+    
+function findVerticalLines(bwImageData, minLength) {
+    const { width, height, data } = bwImageData;
+    const lines = [];
+  
+    // For each column, find continuous runs of black pixels
+    for (let x = 0; x < width; x++) {
+      let y = 0;
+      while (y < height) {
+        if (isBlack(x, y, data, width, height)) {
+          const startY = y;
+          // Move down until we find a non-black pixel
+          while (y < height && isBlack(x, y, data, width, height)) {
+            y++;
+          }
+          const endY = y - 1;
+          const runLength = endY - startY + 1;
+          if (runLength >= minLength) {
+            // Build the segment as an array of points
+            const segment = [];
+            for (let row = startY; row <= endY; row++) {
+              segment.push({ x, y: row });
+            }
+            lines.push(segment);
+          }
+        } else {
+          y++;
+        }
+      }
+    }
+  
+    return lines;
+}
+
+function findIsometricSegments(bwImageData, minLength) {
+    const { width, height, data } = bwImageData;
+  
+    // Example directions for slopes: ±1, ±2, ±0.5
+    // Add or remove directions as needed
+    const isometricDirections = [
+      // slope = ±1
+      { dx:  1, dy:  1 },
+      { dx:  1, dy: -1 },
+      { dx: -1, dy:  1 },
+      { dx: -1, dy: -1 },
+  
+      // slope = ±0.5 (2,1) or (2,-1), etc.
+      { dx:  2, dy:  1 },
+      { dx:  2, dy: -1 },
+      { dx: -2, dy:  1 },
+      { dx: -2, dy: -1 },
+  
+      // slope = ±2 (1,2) or (1,-2), etc.
+      { dx:  1, dy:  2 },
+      { dx:  1, dy: -2 },
+      { dx: -1, dy:  2 },
+      { dx: -1, dy: -2 }
+    ];
+  
+    const allSegments = [];
+  
+    // For each direction, do a separate pass with a direction-specific visited
+    for (const { dx, dy } of isometricDirections) {
+      const visited = new Uint8Array(width * height);
+  
+      // Scan entire image
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (isBlack(x, y, data, width, height) && !visited[getIndex(x, y, width)]) {
+            // "Start" pixel check => the previous pixel (x-dx, y-dy) must not be black
+            const px = x - dx;
+            const py = y - dy;
+            if (isBlack(px, py, data, width, height)) {
+              // This means we're in the middle of a line that was (or will be) traced
+              continue;
+            }
+  
+            // Trace forward
+            const segment = [];
+            let cx = x;
+            let cy = y;
+  
+            while (isBlack(cx, cy, data, width, height) && !visited[getIndex(cx, cy, width)]) {
+              segment.push({ x: cx, y: cy });
+              visited[getIndex(cx, cy, width)] = 1;
+  
+              cx += dx;
+              cy += dy;
+            }
+  
+            if (segment.length >= minLength) {
+              allSegments.push(segment);
+            }
+          }
+        }
+      }
+    }
+  
+    return allSegments;
+}
+  
+  
+
+
+function findAllLineSegments(bwImageData) {
+    const minLength = 4;
+  
+    // 1) Use run-based approach for horizontal/vertical:
+    const horizontalSegments = findHorizontalLines(bwImageData, minLength);
+    const verticalSegments   = findVerticalLines(bwImageData, minLength);
+  
+    // 2) Use direction-based approach for isometric lines (with negative directions, if desired)
+    const isoSegments = findIsometricSegments(bwImageData, minLength); 
+
+    // (Your existing diagonal scanning function or the one we wrote before)
+    return {
+      orthogonal: [
+        ...horizontalSegments,
+        ...verticalSegments
+      ],
+      isometric: isoSegments
+    };
+}
+  
+  
+  
+
+function highlightLinesInGreen(imageData, lines) {
+    const { width, height, data } = imageData;
+
+    // Helper: Modify a pixel to green
+    function setPixelToGreen(x, y) {
+        if (x < 0 || x >= width || y < 0 || y >= height) return;
+        const index = (y * width + x) * 4;
+        data[index] = 0;      // Red channel
+        data[index + 1] = 255; // Green channel
+        data[index + 2] = 0;  // Blue channel
+        data[index + 3] = 255; // Alpha channel (fully opaque)
+    }
+
+    // Highlight each line in green
+    for (const line of lines) {
+        for (const point of line) {
+            setPixelToGreen(point.x, point.y);
         }
     }
-    return (totalEdges > 0) ? (isoEdges / totalEdges) * 100 : 0;
+
+    return imageData;
 }
-function isIsometricAngle(angle, tolerance) {
-    const isoAngles = [30, 150, 210, 330];
-    return isoAngles.some(a => {
-        const diff = Math.min(Math.abs(a - angle), 360 - Math.abs(a - angle));
-        return diff <= tolerance;
-    });
-}
+  
 
 /**
  * 4) Face Check
  */
-async function findFaceMatches(userCanvas, faceMaskEdges, sobelFaceCanvas) {
-    // 1) Sobel of userCanvas
-    const userCtx   = userCanvas.getContext('2d');
-    const userImage = userCtx.getImageData(0, 0, userCanvas.width, userCanvas.height);
-    const userSobel = getSobelDataPixelArt(userImage);
+ function findFaceMatches(bwPixelData, faceMaskEdges) {
+    const { width: userW, height: userH, data: userPixels } = bwPixelData;
 
-    // 2) Load face mask edges from faceMaskEdges
-    const off = document.createElement('canvas');
-    off.width  = faceMaskEdges.width;
-    off.height = faceMaskEdges.height;
-    const offCtx = off.getContext('2d');
-    offCtx.drawImage(faceMaskEdges, 0, 0);
-    const maskData = offCtx.getImageData(0, 0, faceMaskEdges.width, faceMaskEdges.height);
+    // Load face mask edges into a binary format
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = faceMaskEdges.width;
+    maskCanvas.height = faceMaskEdges.height;
+    const maskCtx = maskCanvas.getContext('2d');
+    maskCtx.drawImage(faceMaskEdges, 0, 0);
+    const maskData = maskCtx.getImageData(0, 0, faceMaskEdges.width, faceMaskEdges.height);
+    const { width: maskW, height: maskH, data: maskPixels } = maskData;
 
-    // Optional display
-    if (sobelFaceCanvas) {
-        sobelFaceCanvas.width  = maskData.width;
-        sobelFaceCanvas.height = maskData.height;
-        const sobelFaceCtx = sobelFaceCanvas.getContext('2d');
-        sobelFaceCtx.putImageData(maskData, 0, 0);
-    }
-
-    // Convert face mask edges to a Float32Array
-    const maskMagArr = new Float32Array(maskData.width * maskData.height);
-    for (let i = 0; i < maskMagArr.length; i++) {
-        maskMagArr[i] = maskData.data[i * 4]; // only R needed, since it's grayscale
-    }
-
-    // 3) Overlap logic
-    const userW = userCanvas.width, userH = userCanvas.height;
-    const maskW = maskData.width,  maskH = maskData.height;
     if (maskW > userW || maskH > userH) {
-        console.warn('Face mask is larger than the region - skipping face detection.');
+        console.warn('Face mask is larger than the image region - skipping face detection.');
         return [];
     }
-    const userMagArr = userSobel.edgeMagnitudes;
 
-    // Precompute sum of squares of mask
-    let maskSumSq = 0;
-    for (let i = 0; i < maskMagArr.length; i++) {
-        maskSumSq += (maskMagArr[i] * maskMagArr[i]);
-    }
-    const eps = 1e-8;
-
-    // Sliding window
     const matches = [];
+
+    // Sliding window: Scan the user image for matching regions
     for (let yWin = 0; yWin <= userH - maskH; yWin++) {
         for (let xWin = 0; xWin <= userW - maskW; xWin++) {
-            let dotProd = 0;
-            let userSumSq = 0;
+            let match = true;
 
+            // Compare the mask with the current window
             for (let my = 0; my < maskH; my++) {
                 for (let mx = 0; mx < maskW; mx++) {
-                    const maskVal = maskMagArr[my * maskW + mx];
-                    if (maskVal < 10) continue; // skip weak edges
+                    const maskIndex = (my * maskW + mx) * 4; // RGBA in mask
+                    const userIndex = ((yWin + my) * userW + (xWin + mx)) * 4; // RGBA in user image
 
-                    const userPos = (yWin + my) * userW + (xWin + mx);
-                    const userVal = userMagArr[userPos];
-                    dotProd    += (maskVal * userVal);
-                    userSumSq  += (userVal * userVal);
+                    // Check if a black pixel in the mask exists as black in the user image
+                    if (maskPixels[maskIndex] === 0 && userPixels[userIndex] !== 0) {
+                        match = false;
+                        break;
+                    }
                 }
+                if (!match) break;
             }
-            const corr = dotProd / (Math.sqrt(maskSumSq + eps) * Math.sqrt(userSumSq + eps));
-            matches.push({ x: xWin, y: yWin, correlation: corr });
+
+            // If a match is found, save the bounding box
+            if (match) {
+                matches.push({ x: xWin, y: yWin, width: maskW, height: maskH });
+            }
         }
     }
+
     return matches;
 }
+
 
 function iou(boxA, boxB) {
     const xA = Math.max(boxA.x, boxB.x);
@@ -323,20 +503,15 @@ document.getElementById('processBtn').addEventListener('click', async () => {
     }
 
     try {
-
-        // (Optional) reset the draggable box to top-left
-        boxX = 0;
-        boxY = 0;
-
         // C) When user clicks "Process",
         //    we get the cropping area from the draggable box position
-        const fixedWidth = 322;
-        const fixedHeight = 234;
-        const zoom      = parseFloat(zoomInput.value);
+        const fixedWidth = 161;
+        const fixedHeight = 117;
+        const zoom      = 1;
 
         // read box offset
-        boxX = parseInt(dragBox.style.left, 10);
-        boxY = parseInt(dragBox.style.top, 10);
+        boxX = parseInt(dragBox.style.left, 10) + 11;
+        boxY = parseInt(dragBox.style.top, 10) + 21;
 
         // Prepare the output canvas
         const outW = fixedWidth * zoom;
@@ -355,35 +530,12 @@ document.getElementById('processBtn').addEventListener('click', async () => {
             outW, outH
         );
 
-        // E) Sobel Isometric check
+
         const outData = outputCtx.getImageData(0, 0, outW, outH);
-        const sobel   = getSobelDataPixelArt(outData);
-
-        sobelCanvas.width  = sobel.width;
-        sobelCanvas.height = sobel.height;
-        sobelCtx.putImageData(
-            new ImageData(sobel.edgeImage, sobel.width, sobel.height),
-            0, 0
-        );
-
-        const isoScore = getIsometricScore(
-            sobel.edgeMagnitudes,
-            sobel.edgeAngles,
-            sobel.width,
-            sobel.height,
-            20
-        );
-        isoCheckResult.textContent = `Isometric Score: ${isoScore.toFixed(2)}% (>=10% is a likely pass)`;
-
-        
-        // 3) Now highlight isometric lines in red
-        highlightIsometricEdges(sobel, 20 /* magThreshold */, 8 /* angleTolerance */);
-
-        // 4) Re-draw the edge map with isometric lines in red
-        sobelCtx.putImageData(
-            new ImageData(sobel.edgeImage, sobel.width, sobel.height),
-            0, 0
-        );
+        const bwData   = toBlackAndWhite(outData);
+        if(bwCanvas){
+            bwCtx.putImageData(bwData, 0, 0);
+        }
 
         // F) Face check
         if (!faceMaskLoaded) {
@@ -391,30 +543,30 @@ document.getElementById('processBtn').addEventListener('click', async () => {
             return;
         }
 
-        const matches = await findFaceMatches(outputCanvas, faceMaskImg, sobelFaceCanvas);
-        const threshold = 0.97;
-        const goodMatches = matches.filter(m => m.correlation > threshold);
-        goodMatches.sort((a, b) => b.correlation - a.correlation);
+        const matches = findFaceMatches(bwData, faceMaskImg);
 
-        const boxes = goodMatches.map(m => ({
-            x: m.x,
-            y: m.y,
-            width: faceMaskImg.width,
-            height: faceMaskImg.height,
-            correlation: m.correlation
-        }));
-        const finalBoxes = nonMaxSuppression(boxes, 0.5);
+        faceCheckResult.textContent = matches.length === 0 ? 'No face found above threshold.' : `Found ${matches.length} face(s)`;
 
-        if (finalBoxes.length === 0) {
-            faceCheckResult.textContent = 'No face found above threshold.';
+        // 1) Use 'findIsometricLines' to detect bigger lines
+        const { isometric, orthogonal } = findAllLineSegments(bwData);
+        console.log(isometric, orthogonal);
+        
+        // 2) Show how many lines we found
+        if (isometric.length === 0) {
+            isoCheckResult.textContent += `\nNo isometric lines >= 10px found.`;
         } else {
-            finalBoxes.forEach(m => {
-                outputCtx.strokeStyle = 'lime';
-                outputCtx.lineWidth   = 2;
-                outputCtx.strokeRect(m.x, m.y, faceMaskImg.width, faceMaskImg.height);
-            });
-            faceCheckResult.textContent = `Found ${finalBoxes.length} face(s) with corr > ${threshold}`;
+            isoCheckResult.textContent += `\nFound ${isometric.length} isometric line(s) >= 10px long.`;
         }
+        
+        // Render Debug!
+        highlightLinesInGreen(bwData, isometric);
+        bwCtx.putImageData(bwData, 0, 0);
+
+        matches.forEach(m => {
+            outputCtx.strokeStyle = 'lime';
+            outputCtx.lineWidth   = 2;
+            bwCtx.strokeRect(m.x, m.y, faceMaskImg.width, faceMaskImg.height);
+        });
 
     } catch (err) {
         console.error(err);

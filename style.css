@@ -80,7 +80,10 @@ html, body {
   
   /* Process Button */
   #processBtn {
+    position: absolute;
+    top: 100%;
     padding: 0.5rem 1rem;
+    width: 100%;
     border: none;
     background-color: #4caf50;
     color: #fff;
@@ -173,8 +176,8 @@ html, body {
   */
   #cameraContainer {
     position: relative;
-    width: 600px;    /* Example fixed size: tweak as needed */
-    height: 400px;   /* Example fixed size: tweak as needed */
+    width: 300px;    /* Example fixed size: tweak as needed */
+    height: 200px;   /* Example fixed size: tweak as needed */
     border: 2px solid #ccc;
     border-radius: 6px;
     box-sizing: border-box;
@@ -188,8 +191,8 @@ html, body {
   */
   #dragBox {
     position: absolute;
-    width: 370px;
-    height: 302px;
+    width: 184px;
+    height: 150px;
     box-sizing: border-box;
     cursor: move;
   
