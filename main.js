@@ -519,7 +519,7 @@ function highlightLinesInColor(imageData, lines, colorHex) {
     return imageData;
 }
 
-function findFaceMatches(bwPixelData, faceMaskEdges) {
+function findFaceMatches(bwPixelData, faceMaskEdges, hflip = false) {
     const {
         width: userW,
         height: userH,
@@ -547,19 +547,35 @@ function findFaceMatches(bwPixelData, faceMaskEdges) {
     const matches = [];
     const allowedMismatches = 1;
 
+    // If hflip is true, create a horizontally flipped version of the mask
+    let flippedMaskPixels = maskPixels;
+    if (hflip) {
+        flippedMaskPixels = new Uint8ClampedArray(maskPixels.length);
+        for (let y = 0; y < maskH; y++) {
+            for (let x = 0; x < maskW; x++) {
+                const originalIndex = (y * maskW + x) * 4;
+                const flippedIndex = (y * maskW + (maskW - x - 1)) * 4;
+                flippedMaskPixels[flippedIndex] = maskPixels[originalIndex];         // Red
+                flippedMaskPixels[flippedIndex + 1] = maskPixels[originalIndex + 1]; // Green
+                flippedMaskPixels[flippedIndex + 2] = maskPixels[originalIndex + 2]; // Blue
+                flippedMaskPixels[flippedIndex + 3] = maskPixels[originalIndex + 3]; // Alpha
+            }
+        }
+    }
+
     // Sliding window: Scan the user image for matching regions
     for (let yWin = 0; yWin <= userH - maskH; yWin++) {
         for (let xWin = 0; xWin <= userW - maskW; xWin++) {
             let mismatches = 0;
             let match = true;
 
-            // Compare the mask with the current window
+            // Compare the flipped mask (or original) with the current window
             for (let my = 0; my < maskH; my++) {
                 for (let mx = 0; mx < maskW; mx++) {
-                    const maskIndex = (my * maskW + mx) * 4; // RGBA in mask
+                    const maskIndex = (my * maskW + mx) * 4; // RGBA in mask (flipped if hflip is true)
                     const userIndex = ((yWin + my) * userW + (xWin + mx)) * 4; // RGBA in user image
 
-                    if (maskPixels[maskIndex] !== userPixels[userIndex]) {
+                    if (flippedMaskPixels[maskIndex] !== userPixels[userIndex]) {
                         mismatches++;
                         if (mismatches > allowedMismatches) {
                             match = false;
@@ -584,6 +600,7 @@ function findFaceMatches(bwPixelData, faceMaskEdges) {
 
     return matches;
 }
+
 
 
 function iou(boxA, boxB) {
@@ -738,7 +755,10 @@ async function processImage() {
             bwCtx.putImageData(bwData, 0, 0);
         }
 
-        const matches = findFaceMatches(bwData, faceMaskImg);
+        const matches = [
+            ...findFaceMatches(bwData, faceMaskImg, false),
+            ...findFaceMatches(bwData, faceMaskImg, true),
+        ]
 
         faceCheckResult.textContent = matches.length === 0 ? 'No face found above threshold.' : `Found ${matches.length} face(s)`;
 
