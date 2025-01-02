@@ -1,58 +1,36 @@
-# Fixing the Habbo Camera Problem
+# Image Validation Project
 
-This guide explains how to handle and validate room images in Habbo, ensuring they keep a proper isometric view.
+## Project Description
 
----
+This project focuses on analyzing uploaded images to determine their validity based on specific criteria. The process involves detecting geometric features, identifying the presence of faces, and computing a final score that decides whether the image passes validation. 
 
-## 1. Server-Side Processing
+The system is designed to ensure that uploaded images meet predefined quality standards, such as alignment and feature detection. 
 
-1. **Data Received from Client:**
-   - Full room image.
-   - `room_id` (which room is captured).
-   - `(x, y)` coordinates for cropping.
-   - `zoom` level.
+## Validation Process
 
-2. **Initial Validation:**
-   - **Room Shape Mask**: Use `room_id` to apply a mask that checks if the image matches the room’s shape.
+1. **Line Detection**: 
+   The system identifies various line types, such as horizontal, vertical, and isometric lines. These lines are analyzed for their coverage and relation to the total black pixel count in the image.
 
----
+2. **Face Detection**: 
+   A pre-defined mask is used to identify faces within the cropped area of the image. The number of matches contributes significantly to the overall score.
 
-## 2. Validation Steps
+3. **Score Calculation**:
+   The image is scored based on:
+   - The coverage of detected isometric lines relative to orthogonal lines.
+   - The ratio of isometric lines to the total number of black pixels.
+   - The presence and number of detected faces.
 
-1. **Room Shape Masking**
-   - Confirms the image boundaries align with the expected layout.
+   A weighted scoring system ensures that face detection plays a critical role in determining validity.
 
-2. **Score System for Isometry**
-   - **Habbo Faces Check**: Confirms Habbo characters are correctly oriented.
-   - **Edge Detection**: Ensures edges follow the isometric perspective.
+4. **Final Decision**:
+   If the weighted score exceeds a certain threshold, the image is considered valid. Otherwise, it fails the validation.
 
----
+## Challenge: Overlapping Images
 
-## 3. Final Image Processing
+Currently, the system can be bypassed by overlapping an isometric image and a standard image. This approach can manipulate the detection results to favor validation. For example:
+- Adding a face to the image can boost the score without penalizing the manipulation.
+- Overlapping conflicting features (e.g., orthogonal and isometric lines) creates discrepancies in detection.
 
-1. **Cropping**  
-   - Cut the image using `(x, y)` and `zoom`.
-2. **Filtering**  
-   - Apply any post-processing filters (e.g., sharpening or color-correction).
+## TODO
 
----
-
-## 4. Optimization Techniques
-
-1. **Cached Room Shapes**  
-   - Precompute shapes for common rooms to speed up masking.
-2. **Parallelized Edge Detection**  
-   - Break the image into tiles and run edge checks simultaneously.
-3. **Incremental Validation**  
-   - Reuse previous computations for small zoom changes.
-4. **Selective Filtering**  
-   - Only filter areas that changed due to cropping or zoom adjustments.
-
----
-
-
-Things to consider: This is an example of the algorithm but in the real world, the image is taken from shockwave. And there is no game scale applied.
-
-
-Optiomizations: The sobel facemask can be already calculated via an image.
-We can use another image channel to set which pixels might change on other expressions doing the facecheck on one pass.
+- [ ] **Enhance Overlap Detection**: Implement checks to identify and penalize instances where conflicting image features are deliberately overlapped to manipulate the results. This enhancement will ensure that manipulated images fail the validation process.
