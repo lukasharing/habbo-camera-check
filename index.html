@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Mask Validation + Sobel Isometric Check</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Three-Color Mask Validation + Sobel Isometric Check</h1>
+
+  <!-- Collapsible 'More Info' section -->
+  <details class="more-info">
+    <summary>More Info</summary>
+    <p>
+      <strong>Mask Logic</strong>:
+      <ul>
+        <li><strong>Green</strong> (#00FF00): &gt;99% must be black in the user’s image.</li>
+        <li><strong>Blue</strong> (#0000FF): &gt;60% must be black.</li>
+        <li><strong>Red</strong> (#FF0000): No constraint.</li>
+      </ul>
+      <strong>Isometric Check</strong> (on cropped + zoomed):
+      <ul>
+        <li>Detect edges using Sobel.</li>
+        <li>Measure angles near 30°, 150°, 210°, 330° (±15° tolerance).</li>
+      </ul>
+      <strong>Face Check</strong> (on cropped + zoomed):
+      <ul>
+        <li>Detect by using sliding window on sobel.</li>
+      </ul>
+    </p>
+  </details>
+
+  <div class="form-container">
+
+    <!-- User selects an image (same size as the mask) -->
+    <label>
+      Select an image:
+      <input type="file" id="imageInput" accept="image/*" />
+    </label>
+    <br><br>
+
+    <!-- Coordinates + Zoom -->
+    <label>X:</label>
+    <input type="number" id="xCoord" value="0" />
+    <label>Y:</label>
+    <input type="number" id="yCoord" value="0" />
+    <br><br>
+
+    <label>Zoom:</label>
+    <input type="number" id="zoomInput" value="1" step="0.1" min="0.1" />
+    <input type="hidden" id="fixedSize" value="128" />
+    <br><br>
+
+    <button type="button" id="processBtn">Process</button>
+  </div>
+
+  <!-- Display canvases in a container -->
+  <div class="canvas-container">
+    <div>
+      <h3>Mask Validation View</h3>
+      <canvas id="maskCanvas"></canvas>
+    </div>
+    <div>
+      <h3>Cropped + Zoomed</h3>
+      <canvas id="outputCanvas"></canvas>
+    </div>
+    <div>
+      <h3>Sobel Edge Map</h3>
+      <canvas id="sobelCanvas"></canvas>
+    </div>
+    <div>
+      <h3>Sobel Face Map</h3>
+      <canvas id="sobelFace"></canvas>
+    </div>
+  </div>
+
+  <!-- Results area (no alerts) -->
+  <div class="section">
+    <h3>Validation Results</h3>
+    <pre class="results" id="maskCheckResult"></pre>
+    <pre class="results" id="isoCheckResult"></pre>
+    <pre class="results" id="faceCheckResult"></pre>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
