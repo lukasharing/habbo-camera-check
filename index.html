@@ -8,24 +8,6 @@
 <body>
   <h1>Three-Color Mask Validation + Sobel Isometric Check</h1>
 
-  <!-- Collapsible 'More Info' section -->
-  <details class="more-info">
-    <summary>More Info</summary>
-    <p>
-      <strong>Mask Logic</strong>:
-      <ul>
-        <li><strong>Green</strong> (#00FF00): &gt;99% must be black in the user’s image.</li>
-        <li><strong>Blue</strong> (#0000FF): &gt;60% must be black.</li>
-        <li><strong>Red</strong> (#FF0000): No constraint.</li>
-      </ul>
-      <strong>Isometric Check</strong> (on cropped + zoomed):
-      <strong>Face Check</strong> (on cropped + zoomed):
-      <ul>
-        <li>Detect by using sliding window.</li>
-      </ul>
-    </p>
-  </details>
-
   <div class="form-container">
 
     <!-- User selects an image (same size as the mask) -->
@@ -37,33 +19,30 @@
 
   </div>
 
-  <!-- Draggable “photo” box on top of camera background -->
-  <div class="camera-container" id="cameraContainer">
-    <div id="dragBox">
-      <button type="button" id="processBtn">Process</button>
+  <div class="container-wrapper">
+    <!-- Draggable “photo” box on top of camera background -->
+    <div class="camera-container" id="cameraContainer">
+      <div id="dragBox">
+        <div id="check"></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Display canvases in a container -->
-  <div class="canvas-container">
-    <div>
-      <h3>Cropped + Zoomed</h3>
-      <canvas id="outputCanvas"></canvas>
-    </div>
-    <div>
-      <h3>Black and White Map</h3>
-      <canvas id="bwCanvas"></canvas>
-    </div>
-    <div>
-      <h3>Face Map</h3>
-      <canvas id="faceCanvas"></canvas>
+    <!-- Display canvases in a container -->
+    <div class="canvas-container">
+      <div>
+        <h3>Cropped + Zoomed</h3>
+        <canvas id="outputCanvas"></canvas>
+      </div>
+      <div>
+        <h3>Black and White Map</h3>
+        <canvas id="bwCanvas"></canvas>
+      </div>
     </div>
   </div>
 
   <!-- Results area (no alerts) -->
   <div class="section">
     <h3>Validation Results</h3>
-    <pre class="results" id="maskCheckResult"></pre>
     <pre class="results" id="isoCheckResult"></pre>
     <pre class="results" id="faceCheckResult"></pre>
   </div>

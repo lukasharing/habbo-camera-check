@@ -9,18 +9,20 @@ const outputCtx       = outputCanvas.getContext('2d');
 const bwCanvas        = document.getElementById('bwCanvas');
 const bwCtx           = bwCanvas.getContext('2d');
 
-const faceCanvas      = document.getElementById('faceCanvas');
-const faceCtx         = faceCanvas.getContext('2d');
-
 const isoCheckResult  = document.getElementById('isoCheckResult');
 const faceCheckResult = document.getElementById('faceCheckResult');
 
 const cameraContainer = document.getElementById('cameraContainer');
 const dragBox         = document.getElementById('dragBox');
+const check         = document.getElementById('check');
+
+
+// Debounce Timer
+let debounceTimer = null;
 
 // This “face mask edges” image is used for the face overlap check
 const faceMaskImg  = new Image();
-faceMaskImg.src    = 'image/faceMask.jpg'; // or your path
+faceMaskImg.src    = 'image/faceMaskBorder.jpg'; // or your path
 let faceMaskLoaded = false;
 faceMaskImg.onload = () => {
     faceMaskLoaded = true;
@@ -161,175 +163,264 @@ function isBlob(x, y, data, width, height){
     return isBlack(x + 1, y, data, width, height) && isBlack(x - 1, y, data, width, height) && isBlack(x, y + 1, data, width, height) && isBlack(x, y, data, width, height);
 }
 
+function getIndex(x, y, width) {
+    return y * width + x;
+}
+
+function isBlack(x, y, data, width, height) {
+    if (x < 0 || x >= width || y < 0 || y >= height) return false;
+    const index = getIndex(x, y, width) * 4; // RGBA
+    return data[index] === 0; // black => R=0
+}
+
+function isBlob(x, y, data, width, height) {
+    return (
+        isBlack(x + 1, y, data, width, height) &&
+        isBlack(x - 1, y, data, width, height) &&
+        isBlack(x, y + 1, data, width, height) &&
+        isBlack(x, y - 1, data, width, height)
+    );
+}
+
 function findHorizontalLines(bwImageData, minLength) {
     const { width, height, data } = bwImageData;
     const lines = [];
-  
+
     // For each row, find continuous runs of black pixels
     for (let y = 0; y < height; y++) {
-      let x = 0;
-      while (x < width) {
-        if (isBlack(x, y, data, width, height)) {
-          const startX = x;
-          // Move forward until we find a non-black pixel
-          while (x < width && isBlack(x, y, data, width, height)) {
-            x++;
-          }
-          const endX = x - 1;
-          const runLength = endX - startX + 1;
-          if (runLength >= minLength) {
-            // Build the segment as an array of points
-            const segment = [];
-            for (let col = startX; col <= endX; col++) {
-              segment.push({ x: col, y });
+        let x = 0;
+        while (x < width) {
+            if (isBlack(x, y, data, width, height)) {
+                const segment = [];
+
+                // Start scanning the row for black pixels
+                while (x < width && isBlack(x, y, data, width, height)) {
+                    if (isBlob(x, y, data, width, height)) {
+                        // Blob detected; terminate the segment before this pixel
+                        break;
+                    }
+                    segment.push({ x, y });
+                    x++;
+                }
+
+                const runLength = segment.length;
+                if (runLength >= minLength) {
+                    lines.push(segment);
+                }
+
+                // If a blob was detected, skip the blob pixel to avoid infinite loop
+                if (isBlob(x, y, data, width, height)) {
+                    x++; // Advance past the blob pixel
+                }
+            } else {
+                x++;
             }
-            lines.push(segment);
-          }
-        } else {
-          x++;
         }
-      }
     }
-  
+
     return lines;
 }
-    
+
 function findVerticalLines(bwImageData, minLength) {
     const { width, height, data } = bwImageData;
     const lines = [];
-  
+
     // For each column, find continuous runs of black pixels
     for (let x = 0; x < width; x++) {
-      let y = 0;
-      while (y < height) {
-        if (isBlack(x, y, data, width, height)) {
-          const startY = y;
-          // Move down until we find a non-black pixel
-          while (y < height && isBlack(x, y, data, width, height)) {
-            y++;
-          }
-          const endY = y - 1;
-          const runLength = endY - startY + 1;
-          if (runLength >= minLength) {
-            // Build the segment as an array of points
-            const segment = [];
-            for (let row = startY; row <= endY; row++) {
-              segment.push({ x, y: row });
+        let y = 0;
+        while (y < height) {
+            if (isBlack(x, y, data, width, height)) {
+                const segment = [];
+
+                // Start scanning the column for black pixels
+                while (y < height && isBlack(x, y, data, width, height)) {
+                    if (isBlob(x, y, data, width, height)) {
+                        // Blob detected; terminate the segment before this pixel
+                        break;
+                    }
+                    segment.push({ x, y });
+                    y++;
+                }
+
+                const runLength = segment.length;
+                if (runLength >= minLength) {
+                    lines.push(segment);
+                }
+
+                // If a blob was detected, skip the blob pixel to avoid infinite loop
+                if (isBlob(x, y, data, width, height)) {
+                    y++; // Advance past the blob pixel
+                }
+            } else {
+                y++;
             }
-            lines.push(segment);
-          }
-        } else {
-          y++;
         }
-      }
     }
-  
+
     return lines;
 }
 
 function findIsometricSegments(bwImageData, minLength) {
     const { width, height, data } = bwImageData;
-  
+
     // Example directions for slopes: ±1, ±2, ±0.5
-    // Add or remove directions as needed
+    // Ensure that dx and dy are never both zero
     const isometricDirections = [
-      // slope = ±1
-      { dx:  1, dy:  1 },
-      { dx:  1, dy: -1 },
-      { dx: -1, dy:  1 },
-      { dx: -1, dy: -1 },
-  
-      // slope = ±0.5 (2,1) or (2,-1), etc.
-      { dx:  2, dy:  1 },
-      { dx:  2, dy: -1 },
-      { dx: -2, dy:  1 },
-      { dx: -2, dy: -1 },
-  
-      // slope = ±2 (1,2) or (1,-2), etc.
-      { dx:  1, dy:  2 },
-      { dx:  1, dy: -2 },
-      { dx: -1, dy:  2 },
-      { dx: -1, dy: -2 }
+        // slope = ±1
+        { dx: 1, dy: 1 },
+        { dx: 1, dy: -1 },
+        { dx: -1, dy: 1 },
+        { dx: -1, dy: -1 },
+
+        // slope = ±0.5 (2,1) or (2,-1), etc.
+        { dx: 2, dy: 1 },
+        { dx: 2, dy: -1 },
+        { dx: -2, dy: 1 },
+        { dx: -2, dy: -1 },
+
+        // slope = ±2 (1,2) or (1,-2), etc.
+        { dx: 1, dy: 2 },
+        { dx: 1, dy: -2 },
+        { dx: -1, dy: 2 },
+        { dx: -1, dy: -2 }
     ];
-  
+
     const allSegments = [];
-  
+
     // For each direction, do a separate pass with a direction-specific visited
     for (const { dx, dy } of isometricDirections) {
-      const visited = new Uint8Array(width * height);
-  
-      // Scan entire image
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (isBlack(x, y, data, width, height) && !visited[getIndex(x, y, width)]) {
-            // "Start" pixel check => the previous pixel (x-dx, y-dy) must not be black
-            const px = x - dx;
-            const py = y - dy;
-            if (isBlack(px, py, data, width, height)) {
-              // This means we're in the middle of a line that was (or will be) traced
-              continue;
+        // Prevent directions with both dx and dy as zero
+        if (dx === 0 && dy === 0) continue;
+
+        const visited = new Uint8Array(width * height);
+
+        // Scan entire image
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (isBlack(x, y, data, width, height) && !visited[getIndex(x, y, width)]) {
+                    // "Start" pixel check => the previous pixel (x-dx, y-dy) must not be black
+                    const px = x - dx;
+                    const py = y - dy;
+                    if (isBlack(px, py, data, width, height)) {
+                        // This means we're in the middle of a line that was (or will be) traced
+                        continue;
+                    }
+
+                    // Initialize the segment
+                    const segment = [];
+                    let cx = x;
+                    let cy = y;
+
+                    while (
+                        isBlack(cx, cy, data, width, height) &&
+                        !visited[getIndex(cx, cy, width)]
+                    ) {
+                        // Check if the current pixel is a blob
+                        if (isBlob(cx, cy, data, width, height)) {
+                            // Blob detected; terminate the segment before adding this pixel
+                            break;
+                        }
+
+                        // Add the current pixel to the segment
+                        segment.push({ x: cx, y: cy });
+                        visited[getIndex(cx, cy, width)] = 1;
+
+                        // Move to the next pixel in the current direction
+                        cx += dx;
+                        cy += dy;
+
+                        // Boundary check to prevent infinite loops
+                        if (cx < 0 || cx >= width || cy < 0 || cy >= height) {
+                            break;
+                        }
+                    }
+
+                    if (segment.length >= minLength) {
+                        allSegments.push(segment);
+                    }
+
+                    // If a blob was detected, ensure the next iteration skips it
+                    if (
+                        cx >= 0 &&
+                        cx < width &&
+                        cy >= 0 &&
+                        cy < height &&
+                        isBlob(cx, cy, data, width, height)
+                    ) {
+                        // Mark the blob pixel as visited to prevent reprocessing
+                        visited[getIndex(cx, cy, width)] = 1;
+                    }
+                }
             }
-  
-            // Trace forward
-            const segment = [];
-            let cx = x;
-            let cy = y;
-  
-            while (isBlack(cx, cy, data, width, height) && !visited[getIndex(cx, cy, width)]) {
-              segment.push({ x: cx, y: cy });
-              visited[getIndex(cx, cy, width)] = 1;
-  
-              cx += dx;
-              cy += dy;
-            }
-  
-            if (segment.length >= minLength) {
-              allSegments.push(segment);
-            }
-          }
         }
-      }
     }
-  
+
     return allSegments;
 }
-  
-  
 
+function caculateCoverage(segment, width, height){
+    // Calculate coverage by isometric lines
+    const coverageBitmap = new Uint8Array(width * height); // 0 = not covered, 1 = covered
+    segment.forEach(line => {
+        line.forEach(point => {
+            coverageBitmap[getIndex(point.x, point.y, width)] = 1;
+        });
+    });
+
+    // Count unique pixels
+    return coverageBitmap.reduce((acc, p) => acc + (p === 1 ? 1 : 0), 0);
+}
 
 function findAllLineSegments(bwImageData) {
     const minLength = 4;
-  
-    // 1) Use run-based approach for horizontal/vertical:
-    const horizontalSegments = findHorizontalLines(bwImageData, minLength);
-    const verticalSegments   = findVerticalLines(bwImageData, minLength);
-  
-    // 2) Use direction-based approach for isometric lines (with negative directions, if desired)
-    const isoSegments = findIsometricSegments(bwImageData, minLength); 
+    const { width, height, data } = bwImageData;
 
-    // (Your existing diagonal scanning function or the one we wrote before)
-    return {
-      orthogonal: [
+    // Initialize structures to store line segments
+    const horizontalSegments = findHorizontalLines(bwImageData, minLength);
+    const verticalSegments = findVerticalLines(bwImageData, minLength);
+    const isometricSegments = findIsometricSegments(bwImageData, minLength);
+
+    // Calculate total black pixels in the image
+    let totalBlacks = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i] === 0) { // Check red channel for black
+            totalBlacks++;
+        }
+    }
+
+    let orthogonal = [
         ...horizontalSegments,
         ...verticalSegments
-      ],
-      isometric: isoSegments
+    ];
+
+    return {
+        orthogonal,
+        isometric: isometricSegments,
+        coverIsometric: caculateCoverage(isometricSegments, width, height), // Number of unique pixels covered by isometric lines
+        coverOrthogonal: caculateCoverage(orthogonal, width, height),
+        totalBlacks // Total number of black pixels in the image
     };
 }
+
   
   
   
 
-function highlightLinesInGreen(imageData, lines) {
+function highlightLinesInColor(imageData, lines, colorHex) {
     const { width, height, data } = imageData;
+
+    // Extract RGBA components (assuming little-endian)
+    const r = (colorHex >> 16) & 0xFF;
+    const g = (colorHex >> 8) & 0xFF;
+    const b = colorHex & 0xFF;
 
     // Helper: Modify a pixel to green
     function setPixelToGreen(x, y) {
         if (x < 0 || x >= width || y < 0 || y >= height) return;
         const index = (y * width + x) * 4;
-        data[index] = 0;      // Red channel
-        data[index + 1] = 255; // Green channel
-        data[index + 2] = 0;  // Blue channel
+        data[index] = r;      // Red channel
+        data[index + 1] = g; // Green channel
+        data[index + 2] = b;  // Blue channel
         data[index + 3] = 255; // Alpha channel (fully opaque)
     }
 
@@ -343,20 +434,16 @@ function highlightLinesInGreen(imageData, lines) {
     return imageData;
 }
   
-
-/**
- * 4) Face Check
- */
- function findFaceMatches(bwPixelData, faceMaskEdges) {
+function findFaceMatches(bwPixelData, faceMaskEdges) {
     const { width: userW, height: userH, data: userPixels } = bwPixelData;
 
-    // Load face mask edges into a binary format
+    // Create a canvas to draw the face mask and retrieve its pixel data
     const maskCanvas = document.createElement('canvas');
+    const maskCanvasCtx = maskCanvas.getContext("2d");
     maskCanvas.width = faceMaskEdges.width;
     maskCanvas.height = faceMaskEdges.height;
-    const maskCtx = maskCanvas.getContext('2d');
-    maskCtx.drawImage(faceMaskEdges, 0, 0);
-    const maskData = maskCtx.getImageData(0, 0, faceMaskEdges.width, faceMaskEdges.height);
+    maskCanvasCtx.drawImage(faceMaskEdges, 0, 0);
+    const maskData = maskCanvasCtx.getImageData(0, 0, faceMaskEdges.width, faceMaskEdges.height);
     const { width: maskW, height: maskH, data: maskPixels } = maskData;
 
     if (maskW > userW || maskH > userH) {
@@ -365,10 +452,12 @@ function highlightLinesInGreen(imageData, lines) {
     }
 
     const matches = [];
+    const allowedMismatches = 1;
 
     // Sliding window: Scan the user image for matching regions
     for (let yWin = 0; yWin <= userH - maskH; yWin++) {
         for (let xWin = 0; xWin <= userW - maskW; xWin++) {
+            let mismatches = 0;
             let match = true;
 
             // Compare the mask with the current window
@@ -377,16 +466,18 @@ function highlightLinesInGreen(imageData, lines) {
                     const maskIndex = (my * maskW + mx) * 4; // RGBA in mask
                     const userIndex = ((yWin + my) * userW + (xWin + mx)) * 4; // RGBA in user image
 
-                    // Check if a black pixel in the mask exists as black in the user image
-                    if (maskPixels[maskIndex] === 0 && userPixels[userIndex] !== 0) {
-                        match = false;
-                        break;
+                    if (maskPixels[maskIndex] !== userPixels[userIndex]) {
+                        mismatches++;
+                        if (mismatches > allowedMismatches) {
+                            match = false;
+                            break; // Exit the inner loop early
+                        }
                     }
                 }
-                if (!match) break;
+                if (!match) break; // Exit the middle loop early
             }
 
-            // If a match is found, save the bounding box
+            // If a match is found based on the threshold, save the bounding box
             if (match) {
                 matches.push({ x: xWin, y: yWin, width: maskW, height: maskH });
             }
@@ -468,6 +559,12 @@ function nonMaxSuppression(detections, iouThreshold=0.3) {
  
      dragBox.style.left = `${newLeft}px`;
      dragBox.style.top  = `${newTop}px`;
+
+     // Debounce processing
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        processImage();
+    }, 100); // 100ms debounce
  });
  
  // On mouseup, stop dragging
@@ -489,21 +586,17 @@ imageInput.addEventListener('change', async () => {
 
 });
 
-/**
- * 6) Main 'Process' button
- */
-document.getElementById('processBtn').addEventListener('click', async () => {
+async function processImage() {
     isoCheckResult.textContent  = '';
     faceCheckResult.textContent = '';
 
-    const file = imageInput.files[0];
-    if (!file) {
-        isoCheckResult.textContent = 'No image selected.';
+    if (!userImg) {
+        isoCheckResult.textContent = 'No image loaded.';
         return;
     }
 
     try {
-        // C) When user clicks "Process",
+        // C) When processing is triggered,
         //    we get the cropping area from the draggable box position
         const fixedWidth = 161;
         const fixedHeight = 117;
@@ -532,8 +625,10 @@ document.getElementById('processBtn').addEventListener('click', async () => {
 
 
         const outData = outputCtx.getImageData(0, 0, outW, outH);
-        const bwData   = toBlackAndWhite(outData);
+        const bwData   = toBlackAndWhite(outData, 2);
         if(bwCanvas){
+            bwCanvas.width = outW;
+            bwCanvas.height = outH;
             bwCtx.putImageData(bwData, 0, 0);
         }
 
@@ -547,29 +642,58 @@ document.getElementById('processBtn').addEventListener('click', async () => {
 
         faceCheckResult.textContent = matches.length === 0 ? 'No face found above threshold.' : `Found ${matches.length} face(s)`;
 
-        // 1) Use 'findIsometricLines' to detect bigger lines
-        const { isometric, orthogonal } = findAllLineSegments(bwData);
-        console.log(isometric, orthogonal);
-        
+        // 1) Use 'findAllLineSegments' to detect lines
+        const { isometric, orthogonal, coverIsometric, coverOrthogonal, totalBlacks } = findAllLineSegments(bwData);
+        console.log(coverIsometric, coverOrthogonal);
+
         // 2) Show how many lines we found
         if (isometric.length === 0) {
-            isoCheckResult.textContent += `\nNo isometric lines >= 10px found.`;
+            isoCheckResult.textContent += `\nNo isometric lines.`;
         } else {
-            isoCheckResult.textContent += `\nFound ${isometric.length} isometric line(s) >= 10px long.`;
+            isoCheckResult.textContent += `\nFound ${isometric.length} isometric line(s).`;
         }
         
         // Render Debug!
-        highlightLinesInGreen(bwData, isometric);
+        highlightLinesInColor(bwData, isometric, 0x00FF00);
+        highlightLinesInColor(bwData, orthogonal, 0x0000FF);
         bwCtx.putImageData(bwData, 0, 0);
 
+        // Highlight face matches with red rectangles
         matches.forEach(m => {
-            outputCtx.strokeStyle = 'lime';
-            outputCtx.lineWidth   = 2;
+            bwCtx.strokeStyle = 'red';
+            bwCtx.lineWidth   = 1;
             bwCtx.strokeRect(m.x, m.y, faceMaskImg.width, faceMaskImg.height);
         });
+
+        // Destructure weights
+        const { w1, w2, w3 } = { w1: 0.3, w2: 0.3, w3: 0.4 }; // Faces give more!
+        
+        // Calculate individual scores
+        const scoreC1 = Math.min(coverIsometric / (coverOrthogonal * 0.9), 1); // Already a ratio between 0 and potentially >1
+        const scoreC2 = coverIsometric / totalBlacks;     // Ratio between 0 and 1
+        const scoreC3 = Math.min(matches.length / 3, 1);           // Ratio between 0 and 1
+        
+        // Calculate total score with weights
+        const totalScore = (w1 * scoreC1) + (w2 * scoreC2) + (w3 * scoreC3);
+        
+        console.log(totalScore);
+        const isValidImage = totalScore >= 0.5;
+
+        // Display the validation result
+        if (isValidImage) {
+            // Image is valid
+            console.log("Yes, the image is valid.");
+            // Optionally, update the UI to reflect the valid status
+            check.textContent = `✅ = ${totalScore.toFixed(2)}`;
+        } else {
+            // Image is invalid
+            console.log("No, the image is invalid.");
+            // Optionally, update the UI to reflect the invalid status
+            check.textContent = `❌ =  ${totalScore.toFixed(2)}`;
+        }
 
     } catch (err) {
         console.error(err);
         isoCheckResult.textContent = 'Error: ' + err.message;
     }
-});
+}

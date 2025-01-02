@@ -1,202 +1,200 @@
 /* Reset & Base */
-html, body {
-    margin: 0;
-    padding: 0;
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #fafafa;
-    color: #333;
-  }
-  
-  body {
-    padding: 1.5rem;
-  }
-  
-  /* Headline */
-  h1 {
-    margin-bottom: 0.5rem;
-    font-size: 1.8rem;
-    color: #444;
-  }
-  
-  /* Collapsible 'More Info' */
-  details.more-info {
-    margin: 1rem 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #fff;
-    padding: 0.5rem 1rem;
-  }
-  details.more-info summary {
-    font-weight: bold;
-    color: #666;
-    cursor: pointer;
-    outline: none;
-  }
-  details.more-info[open] summary {
-    color: #000;
-  }
-  details.more-info p {
-    margin: 0.5rem 0 0 0;
-    line-height: 1.5;
-  }
-  
-  /* Form Container */
-  .form-container {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-  
-  .form-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
-    margin-bottom: 0.8rem;
-  }
-  .form-row label {
-    font-weight: 500;
-    margin-right: 0.3rem;
-    color: #555;
-  }
-  .form-row input[type="file"] {
-    padding: 0.3rem;
-    cursor: pointer;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    background-color: #fafafa;
-  }
-  .form-row input[type="number"] {
-    width: 5rem;
-    padding: 0.3rem;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    background-color: #fff;
-    text-align: center;
-  }
-  
-  /* Process Button */
-  #processBtn {
-    position: absolute;
-    top: 100%;
-    padding: 0.5rem 1rem;
-    width: 100%;
-    border: none;
-    background-color: #4caf50;
-    color: #fff;
-    font-weight: 600;
-    border-radius: 3px;
-    cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-  }
-  #processBtn:hover {
-    background-color: #45a049;
-  }
-  
-  /* Main container: Two columns */
-  .main-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2rem;
-    margin-top: 2rem;
-  }
-  
-  /* Left column: Mask Validation alone */
-  .left-panel {
-    flex: 0 1 320px;
-    max-width: 600px;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  /* Right column: stacked boxes for Cropped+Zoomed + Sobel */
-  .right-panel {
-    flex: 1 1 320px;
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-  }
-  
-  /* "Panel box" style wrappers */
-  .panel-box {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 1rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-  .panel-box h3 {
-    margin-top: 0;
-    margin-bottom: 0.75rem;
-    font-size: 1.1rem;
-    color: #555;
-  }
-  
-  /* Mask Canvas can be larger (auto) */
-  #maskCanvas {
-    width: 100%;
-    height: auto;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background-color: #fff;
-    box-sizing: border-box;
-  }
-  
-  /* EXACT 128×128 for output, sobel, and face */
-  #outputCanvas, 
-  #sobelCanvas,
-  #sobelFace {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background-color: #fff;
-    box-sizing: border-box;
-  }
-  
-  /* Results area */
-  .results {
-    margin-top: 1rem;
-    padding: 0.5rem;
-    background-color: #fff;
-    border-left: 4px solid #4caf50;
-    border-radius: 4px;
-    white-space: pre;
-    font-size: 0.95rem;
-    color: #333;
-    line-height: 1.4;
-  }
-  
-  /* 
-    cameraContainer 
-    - This can be any style you wish. For example, fixed size, or auto.
-    - If you're going to place the dragBox inside it, it should have position: relative.
-  */
-  #cameraContainer {
-    position: relative;
-    width: 300px;    /* Example fixed size: tweak as needed */
-    height: 200px;   /* Example fixed size: tweak as needed */
-    border: 2px solid #ccc;
-    border-radius: 6px;
-    box-sizing: border-box;
-    background-color: #f0f0f0; /* fallback color */
-    overflow: hidden;
-  }
-  
-  /* 
-    dragBox: showing camera.png as the background image. 
-    You can tweak background-size, position, etc. 
-  */
-  #dragBox {
-    position: absolute;
-    width: 184px;
-    height: 150px;
-    box-sizing: border-box;
-    cursor: move;
-  
-    background: url("image/camera.png") no-repeat center center;
-    background-size: cover;  /* or 'contain' if you want to see the full camera */
-  }
-  
+html,
+body {
+	margin: 0;
+	padding: 0;
+	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+	background-color: #fafafa;
+	color: #333;
+}
+
+body {
+	padding: 1.5rem;
+}
+
+/* Headline */
+h1 {
+	margin-bottom: 0.5rem;
+	font-size: 1.8rem;
+	color: #444;
+}
+
+/* Collapsible 'More Info' */
+details.more-info {
+	margin: 1rem 0;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	background-color: #fff;
+	padding: 0.5rem 1rem;
+}
+
+details.more-info summary {
+	font-weight: bold;
+	color: #666;
+	cursor: pointer;
+	outline: none;
+}
+
+details.more-info[open] summary {
+	color: #000;
+}
+
+details.more-info p {
+	margin: 0.5rem 0 0 0;
+	line-height: 1.5;
+}
+
+/* Form Container */
+.form-container {
+	background-color: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	padding: 1rem;
+	margin-bottom: 1.5rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.form-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	align-items: center;
+	margin-bottom: 0.8rem;
+}
+
+.form-row label {
+	font-weight: 500;
+	margin-right: 0.3rem;
+	color: #555;
+}
+
+.form-row input[type="file"] {
+	padding: 0.3rem;
+	cursor: pointer;
+	border: 1px solid #ccc;
+	border-radius: 3px;
+	background-color: #fafafa;
+}
+
+.form-row input[type="number"] {
+	width: 5rem;
+	padding: 0.3rem;
+	border: 1px solid #ccc;
+	border-radius: 3px;
+	background-color: #fff;
+	text-align: center;
+}
+
+/* Main container: Two columns */
+.main-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2rem;
+	margin-top: 2rem;
+}
+
+/* Left column: Mask Validation alone */
+.left-panel {
+	flex: 0 1 320px;
+	max-width: 600px;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+/* Right column: stacked boxes for Cropped+Zoomed + Sobel */
+.right-panel {
+	flex: 1 1 320px;
+	display: flex;
+	flex-direction: column;
+	gap: 2rem;
+}
+
+/* "Panel box" style wrappers */
+.panel-box {
+	background-color: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	padding: 1rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.panel-box h3 {
+	margin-top: 0;
+	margin-bottom: 0.75rem;
+	font-size: 1.1rem;
+	color: #555;
+}
+
+/* Mask Canvas can be larger (auto) */
+#maskCanvas {
+	width: 100%;
+	height: auto;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background-color: #fff;
+	box-sizing: border-box;
+}
+
+/* EXACT 128×128 for output, sobel, and face */
+#outputCanvas,
+#bwCanvas {
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background-color: #fff;
+	box-sizing: border-box;
+}
+
+/* Results area */
+.results {
+	margin-top: 1rem;
+	padding: 0.5rem;
+	background-color: #fff;
+	border-left: 4px solid #4caf50;
+	border-radius: 4px;
+	white-space: pre;
+	font-size: 0.95rem;
+	color: #333;
+	line-height: 1.4;
+}
+
+#cameraContainer {
+	position: relative;
+	min-width: 300px;
+	/* Example fixed size: tweak as needed */
+	min-height: 300px;
+	/* Example fixed size: tweak as needed */
+	border: 2px solid #ccc;
+	border-radius: 6px;
+	box-sizing: border-box;
+	background-color: #f0f0f0;
+	/* fallback color */
+	overflow: hidden;
+}
+
+/* 
+dragBox: showing camera.png as the background image. 
+You can tweak background-size, position, etc. 
+*/
+#dragBox {
+	position: absolute;
+	width: 184px;
+	height: 150px;
+	box-sizing: border-box;
+	cursor: move;
+
+	background: url("image/camera.png") no-repeat center center;
+	background-size: cover;
+	/* or 'contain' if you want to see the full camera */
+}
+
+
+.container-wrapper {
+	display: flex;
+	align-items: center;
+	justify-content: space-around;
+}
+
+#check {
+	color: white;
+}
