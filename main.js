@@ -124,169 +124,26 @@ function getSobelDataPixelArt(imageData) {
 /**
  * 3) Isometric check
  */
-/**
- * findIsometricLines
- *  - magArr, angArr: from Sobel (same length = width*height)
- *  - width, height
- *  - magThreshold: minimum magnitude to consider “edge”
- *  - angleTolerance: ± around each isometric angle
- *  - minLineLen: how many consecutive pixels to be considered a line
- *
- * Returns an array of lines:
- *   Each line = { angle: 30 or 150 or 210 or 330, points: [ {x, y}, ... ] }
- */
- function findIsometricLines(
-    magArr, angArr,
-    width, height,
-    magThreshold = 20,
-    angleTolerance = 8,
-    minLineLen = 10
-  ) {
-    const size = width * height;
-    const visited = new Uint8Array(size); // 0 = not visited, 1 = visited
-  
-    // 1) Mark which pixels are "isometric edges"
-    const isIsoEdge = new Uint8Array(size);
-    for (let i = 0; i < size; i++) {
-      if (magArr[i] > magThreshold) {
-        const angle = angArr[i];
-        if (isIsometricAngle(angle, angleTolerance)) {
-          isIsoEdge[i] = 1; // yes, an isometric edge
+function getIsometricScore(magArr, angArr, width, height, threshold = 20) {
+    let totalEdges = 0, isoEdges = 0;
+    for (let i = 0; i < magArr.length; i++) {
+        if (magArr[i] > threshold) {
+            totalEdges++;
+            const angle = angArr[i];
+            if (isIsometricAngle(angle, 8)) {
+                isoEdges++;
+            }
         }
-      }
     }
-  
-    const lines = [];
-  
-    // Helper to convert (x, y) <-> index
-    function idxFromXY(x, y) {
-      return y * width + x;
-    }
-    function xyFromIdx(i) {
-      const y = Math.floor(i / width);
-      const x = i % width;
-      return {x, y};
-    }
-  
-    // 2) We'll define discrete directions for 30,150,210,330
-    //    Each direction has a dx, dy for integer steps.
-    //    We choose the "closest" direction for each pixel's angle so that we only walk that way.
-    //    Alternatively, you could do a BFS that allows slight angle variations.
-    function closestIsometricAngle(angle) {
-      // We pick whichever of [30,150,210,330] is closest
-      const isoAngles = [30, 150, 210, 330];
-      let best = isoAngles[0];
-      let bestDiff = 9999;
-      for (let iso of isoAngles) {
-        let diff = Math.abs(iso - angle);
-        if (diff > 180) diff = 360 - diff;
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          best = iso;
-        }
-      }
-      return best;
-    }
-  
-    // For each of the 4 angles, define (dx,dy)
-    // - 30° = slope down-right => dx=1, dy=-1 if we consider "y down" as positive
-    //   Actually, let's define them carefully:
-    const directionMap = {
-      30:  { dx: 1,  dy: -1 }, // up-right
-      150: { dx: -1, dy: -1 }, // up-left
-      210: { dx: -1, dy: 1  }, // down-left
-      330: { dx: 1,  dy: 1  }  // down-right
-    };
-  
-    // 3) Now we scan each pixel that is an isometric edge
-    for (let i = 0; i < size; i++) {
-      if (!isIsoEdge[i] || visited[i] === 1) {
-        continue;
-      }
-      visited[i] = 1;
-  
-      // This pixel has an isometric angle => find which angle
-      const angle = angArr[i];
-      const mainAngle = closestIsometricAngle(angle);
-  
-      // We'll collect connected pixels going forward (dx, dy)
-      // and also backward (-dx, -dy).
-      const { x, y } = xyFromIdx(i);
-      const { dx, dy } = directionMap[mainAngle];
-  
-      // forward chain
-      const forward = traceLine(x, y, dx, dy);
-      // backward chain
-      const backward = traceLine(x, y, -dx, -dy);
-  
-      // Combine (excluding the current pixel from one side so we don’t double-count)
-      // The final line is backward.reverse() + [currentPixel] + forward
-      backward.pop(); // remove the repeated center pixel
-      const points = backward.reverse().concat(forward);
-  
-      // Mark them visited
-      for (const pt of points) {
-        visited[idxFromXY(pt.x, pt.y)] = 1;
-      }
-  
-      // If line is >= minLineLen => record it
-      if (points.length >= minLineLen) {
-        lines.push({
-          angle: mainAngle,
-          points
-        });
-      }
-    }
-  
-    /**
-     * traceLine: Starting from (sx, sy), move in (dx, dy) while
-     *   - in bounds
-     *   - isIsoEdge = 1
-     *   - not visited
-     */
-    function traceLine(sx, sy, dx, dy) {
-      const chain = [];
-      let cx = sx, cy = sy;
-  
-      while (true) {
-        // push
-        chain.push({ x: cx, y: cy });
-  
-        // next
-        let nx = cx + dx;
-        let ny = cy + dy;
-  
-        // check bounds
-        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-          break;
-        }
-        const nIdx = idxFromXY(nx, ny);
-        if (!isIsoEdge[nIdx] || visited[nIdx] === 1) {
-          break;
-        }
-  
-        // continue
-        visited[nIdx] = 1;
-        cx = nx; cy = ny;
-      }
-      return chain;
-    }
-  
-    return lines;
-  }
-  
-  /**
-   * Helper: true if 'angle' is within ±'tolerance' of any isometric angle [30,150,210,330].
-   */
-  function isIsometricAngle(angle, tolerance = 8) {
+    return (totalEdges > 0) ? (isoEdges / totalEdges) * 100 : 0;
+}
+function isIsometricAngle(angle, tolerance) {
     const isoAngles = [30, 150, 210, 330];
     return isoAngles.some(a => {
-      let diff = Math.abs(a - angle);
-      if (diff > 180) diff = 360 - diff; // account for wraparound
-      return diff <= tolerance;
+        const diff = Math.min(Math.abs(a - angle), 360 - Math.abs(a - angle));
+        return diff <= tolerance;
     });
-  }
-  
+}
 
 /**
  * 4) Face Check
@@ -452,24 +309,6 @@ imageInput.addEventListener('change', async () => {
 
 });
 
-function highlightIsometricEdges(sobel, magThreshold = 20, angleTolerance = 8) {
-    const { width, height, edgeMagnitudes, edgeAngles, edgeImage } = sobel;
-
-    for (let i = 0; i < edgeMagnitudes.length; i++) {
-        const mag = edgeMagnitudes[i];
-        if (mag > magThreshold) {
-            // If it's an isometric angle, color red
-            const angle = edgeAngles[i];
-            if (isIsometricAngle(angle, angleTolerance)) {
-                edgeImage[i * 4 + 0] = 255; // R
-                edgeImage[i * 4 + 1] = 0;   // G
-                edgeImage[i * 4 + 2] = 0;   // B
-                edgeImage[i * 4 + 3] = 255; // A
-            }
-        }
-    }
-}
-
 /**
  * 6) Main 'Process' button
  */
@@ -536,6 +375,7 @@ document.getElementById('processBtn').addEventListener('click', async () => {
         );
         isoCheckResult.textContent = `Isometric Score: ${isoScore.toFixed(2)}% (>=10% is a likely pass)`;
 
+        
         // 3) Now highlight isometric lines in red
         highlightIsometricEdges(sobel, 20 /* magThreshold */, 8 /* angleTolerance */);
 
