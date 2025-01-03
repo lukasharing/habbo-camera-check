@@ -625,7 +625,7 @@ imageInput.addEventListener('change', async () => {
 
 });
 
-function computeWeightedScore(passPartitions, gridCols = 23, gridRows = 39, decayRate = 3) {
+function computeWeightedScore(passPartitions, gridCols = 23, gridRows = 39, decayRate = 8) {
     // Calculate the center coordinates of the grid
     const centerX = (gridCols - 1) / 2;
     const centerY = (gridRows - 1) / 2;
@@ -667,20 +667,19 @@ function computeWeightedScore(passPartitions, gridCols = 23, gridRows = 39, deca
     return Math.min(Math.max(score, 0), 1);
 }
 
-function computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4){
-    return Math.max(0.0, (w1 * scoreC1) + (w2 * scoreC2) + (w3 * scoreC3) - w4 * scoreC4);
+function computeTotalScore(scoreC1, scoreC2, scoreC3, w1, w2, w3){
+    return Math.max(0.0, (w1 * scoreC1) + (w2 * scoreC2) - w3 * scoreC3);
 }
 
-function updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4) {
+function updateResultsDisplay(scoreC1, scoreC2, scoreC3, w1, w2, w3) {
     // Define thresholds for individual scores to display checkmarks
     const thresholds = {
-        scoreC1: 1.0, // Example threshold for C1
-        scoreC2: 0.5, // Example threshold for C2
-        scoreC3: 0.1, // Example threshold for C3
-        scoreC4: 0.5  // Example threshold for C4
+        scoreC1: 0.5, // Example threshold for C1
+        scoreC2: 0.1, // Example threshold for C2
+        scoreC3: 0.5  // Example threshold for C3
     };
 
-    console.log(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+    console.log(scoreC1, scoreC2, scoreC3, w1, w2, w3);
 
     // Helper function to determine pass/fail for a score
     function getStatus(score, threshold) {
@@ -688,7 +687,7 @@ function updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4
     }
 
     // Create HTML content for the results
-    const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+    const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, w1, w2, w3);
     const resultsHTML = `
         <h2>Validation Results</h2>
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -703,32 +702,25 @@ function updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4
             </thead>
             <tbody>
                 <tr>
-                    <td>Score C1</td>
-                    <td>Isometric Coverage coverIsometric >= (coverOrthogonal * 0.8)</td>
+                    <td>Score C2</td>
+                    <td>Isometric Coverage over Total Blacks (coverIsometric / totalBlacks)</td>
                     <td>${ w1 }</td>
                     <td>${scoreC1.toFixed(2)}</td>
                     <td>${getStatus(scoreC1, thresholds.scoreC1)}</td>
                 </tr>
                 <tr>
-                    <td>Score C2</td>
-                    <td>Isometric Coverage over Total Blacks (coverIsometric / totalBlacks)</td>
+                    <td>Score C3</td>
+                    <td>Face Match Ratio (matches.length / 2)</td>
                     <td>${ w2 }</td>
                     <td>${scoreC2.toFixed(2)}</td>
                     <td>${getStatus(scoreC2, thresholds.scoreC2)}</td>
                 </tr>
                 <tr>
-                    <td>Score C3</td>
-                    <td>Face Match Ratio (matches.length / 3)</td>
+                    <td>Score C4</td>
+                    <td>Weighted Grid Score (computeWeightedScore)</td>
                     <td>${ w3 }</td>
                     <td>${scoreC3.toFixed(2)}</td>
                     <td>${getStatus(scoreC3, thresholds.scoreC3)}</td>
-                </tr>
-                <tr>
-                    <td>Score C4</td>
-                    <td>Weighted Grid Score (computeWeightedScore)</td>
-                    <td>${ w4 }</td>
-                    <td>${scoreC4.toFixed(2)}</td>
-                    <td>${getStatus(scoreC4, thresholds.scoreC4)}</td>
                 </tr>
                 <tr>
                     <td><strong>Total Score</strong></td>
@@ -818,7 +810,6 @@ async function processImage() {
 
         // Render Debug!
         highlightLinesInColor(bwData, isometric, 0x00FF00);
-        highlightLinesInColor(bwData, orthogonal, 0x0000FF);
         bwCtx.putImageData(bwData, 0, 0);
 
         const gridCols = 7;
@@ -826,7 +817,7 @@ async function processImage() {
 
         const partitions = partitionAndCountLines(isometric, orthogonal, outW, outH, gridCols, gridRows);
 
-        const passPartitions = partitions.map((row) => row.map(([isometric, orthogonal]) => isometric && (isometric >= orthogonal * 0.8)));
+        const passPartitions = partitions.map((row) => row.map(([isometric,]) => isometric));
         rectanglesCanvas.width = outW;
         rectanglesCanvas.height = outH;
 
@@ -862,24 +853,21 @@ async function processImage() {
             w1,
             w2,
             w3,
-            w4
         } = {
-            w1: 0.3, // ratio between isometric and orthogonal
-            w2: 0.3, // Isometric Lines Covering black
-            w3: 0.4, // Faces
-            w4: 0.2, // Penalty
+            w1: 0.3333, // Isometric Lines Covering black
+            w2: 0.6666, // Faces
+            w3: 0.1, // Penalty
         };
 
         // Calculate individual scores
-        const scoreC1 = coverIsometric >= (coverOrthogonal * 0.8) ? 1 : 0; // Already a ratio between 0 and potentially >1
-        const scoreC2 = coverIsometric / totalBlacks; // Ratio between 0 and 1
-        const scoreC3 = Math.min(matches.length / 3, 1); // Ratio between 0 and 1
-        const scoreC4 = 1.0 - computeWeightedScore(passPartitions, gridCols, gridRows);
+        const scoreC1 = coverIsometric / totalBlacks; // Ratio between 0 and 1
+        const scoreC2 = Math.min(matches.length / 2, 1); // Ratio between 0 and 1
+        const scoreC3 = 1.0 - computeWeightedScore(passPartitions, gridCols, gridRows);
 
         // Calculate total score with weights
-        const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+        const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, w1, w2, w3);
 
-        updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+        updateResultsDisplay(scoreC1, scoreC2, scoreC3, w1, w2, w3);
 
         const isValidImage = totalScore >= 0.5;
 
