@@ -138,7 +138,8 @@ details.more-info p {
 
 /* EXACT 128×128 for output, sobel, and face */
 #outputCanvas,
-#bwCanvas {
+#bwCanvas,
+#rectanglesCanvas {
 	border: 1px solid #ccc;
 	border-radius: 4px;
 	background-color: #fff;

@@ -19,8 +19,10 @@ const outputCtx = outputCanvas.getContext('2d');
 const bwCanvas = document.getElementById('bwCanvas');
 const bwCtx = bwCanvas.getContext('2d');
 
-const isoCheckResult = document.getElementById('isoCheckResult');
-const faceCheckResult = document.getElementById('faceCheckResult');
+const rectanglesCanvas = document.getElementById('rectanglesCanvas');
+const rectanglesCtx = rectanglesCanvas.getContext('2d');
+
+const results = document.getElementById('results');
 
 const cameraContainer = document.getElementById('cameraContainer');
 const dragBox = document.getElementById('dragBox');
@@ -29,13 +31,11 @@ const check = document.getElementById('check');
 
 const case1 = document.getElementById('case1');
 const case2 = document.getElementById('case2');
+const case3 = document.getElementById('case3');
 
 
 // Debounce Timer
 let debounceTimer = null;
-
-// This “face mask edges” image is used for the face overlap check
-let faceMaskImg = undefined;
 
 // For tracking the user image once loaded
 let userImg = null;
@@ -86,84 +86,6 @@ function loadFileAsImage(file) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
-}
-
-function getSobelDataPixelArt(imageData) {
-    const {
-        width,
-        height,
-        data
-    } = imageData;
-
-    // 1) Grayscale
-    const gray = new Uint8ClampedArray(width * height);
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i],
-            g = data[i + 1],
-            b = data[i + 2];
-        gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
-    }
-
-    // 2) Sobel
-    const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
-    const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
-    const magArr = new Float32Array(width * height);
-    const angArr = new Float32Array(width * height);
-
-    function getGray(x, y) {
-        x = Math.max(0, Math.min(x, width - 1));
-        y = Math.max(0, Math.min(y, height - 1));
-        return gray[y * width + x];
-    }
-
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            let gx = 0,
-                gy = 0,
-                idx = 0;
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    const val = getGray(x + dx, y + dy);
-                    gx += val * sobelX[idx];
-                    gy += val * sobelY[idx];
-                    idx++;
-                }
-            }
-            const mag = Math.sqrt(gx * gx + gy * gy);
-            let angle = Math.atan2(gy, gx) * (180 / Math.PI);
-            if (angle < 0) angle += 360;
-
-            const pos = y * width + x;
-            magArr[pos] = mag;
-            angArr[pos] = angle;
-        }
-    }
-
-    // 3) Normalize magnitudes
-    let maxMag = 0;
-    for (let i = 0; i < magArr.length; i++) {
-        if (magArr[i] > maxMag) maxMag = magArr[i];
-    }
-
-    // 4) Binarize edge map for quick display
-    const threshold = 99;
-    const edgeData = new Uint8ClampedArray(width * height * 4);
-    for (let i = 0; i < magArr.length; i++) {
-        let val = (magArr[i] / maxMag) * 255;
-        val = val > threshold ? 255 : 0;
-        edgeData[i * 4 + 0] = val;
-        edgeData[i * 4 + 1] = val;
-        edgeData[i * 4 + 2] = val;
-        edgeData[i * 4 + 3] = 255;
-    }
-
-    return {
-        width,
-        height,
-        edgeMagnitudes: magArr,
-        edgeAngles: angArr,
-        edgeImage: edgeData
-    };
 }
 
 function getIndex(x, y, width) {
@@ -601,33 +523,35 @@ function findFaceMatches(bwPixelData, faceMaskEdges, hflip = false) {
     return matches;
 }
 
+function partitionAndCountLines(isometric, orthogonal, imageWidth, imageHeight, gridCols, gridRows) {
+    const cellWidth = Math.floor(imageWidth / gridCols);
+    const cellHeight = Math.floor(imageHeight / gridRows);
 
+    const gridCounts = Array.from({ length: gridRows }, () =>
+        Array.from({ length: gridCols }, () => ([0, 0]))
+    );
 
-function iou(boxA, boxB) {
-    const xA = Math.max(boxA.x, boxB.x);
-    const yA = Math.max(boxA.y, boxB.y);
-    const xB = Math.min(boxA.x + boxA.width, boxB.x + boxB.width);
-    const yB = Math.min(boxA.y + boxA.height, boxB.y + boxB.height);
+    function getGridCell(x, y) {
+        const col = Math.min(Math.floor(x / cellWidth), gridCols - 1);
+        const row = Math.min(Math.floor(y / cellHeight), gridRows - 1);
+        return { row, col };
+    }
 
-    const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
-    const boxAArea = boxA.width * boxA.height;
-    const boxBArea = boxB.width * boxB.height;
-    return interArea / (boxAArea + boxBArea - interArea);
-}
-
-function nonMaxSuppression(detections, iouThreshold = 0.3) {
-    const final = [];
-    detections.forEach(det => {
-        let keep = true;
-        for (const f of final) {
-            if (iou(det, f) > iouThreshold) {
-                keep = false;
-                break;
-            }
-        }
-        if (keep) final.push(det);
+    isometric.forEach(line => {
+        line.forEach(point => {
+            const { row, col } = getGridCell(point.x, point.y);
+            gridCounts[row][col][0] += 1;
+        });
     });
-    return final;
+
+    orthogonal.forEach(line => {
+        line.forEach(point => {
+            const { row, col } = getGridCell(point.x, point.y);
+            gridCounts[row][col][1] += 1;
+        });
+    });
+
+    return gridCounts;
 }
 
 /**
@@ -690,6 +614,7 @@ document.addEventListener('mouseup', () => {
 
 case1.addEventListener("click", async () => (userImg = await loadImage("./example/example-ok.jpg"), processImage()));
 case2.addEventListener("click", async () => (userImg = await loadImage("./example/example-wrong.jpg"), processImage()));
+case3.addEventListener("click", async () => (userImg = await loadImage("./example/example.jpg"), processImage()));
 
 imageInput.addEventListener('change', async () => {
     const file = imageInput.files[0];
@@ -700,9 +625,127 @@ imageInput.addEventListener('change', async () => {
 
 });
 
+function computeWeightedScore(passPartitions, gridCols = 23, gridRows = 39, decayRate = 3) {
+    // Calculate the center coordinates of the grid
+    const centerX = (gridCols - 1) / 2;
+    const centerY = (gridRows - 1) / 2;
+
+    let totalWeight = 0;
+    let weightedPass = 0;
+
+    // Determine the maximum possible distance from the center using Taxicab metric
+    const maxDistance = centerX + centerY;
+
+    for (let row = 0; row < gridRows; row++) {
+        for (let col = 0; col < gridCols; col++) {
+            // Calculate Taxicab distance from the center
+            const dx = Math.abs(col - centerX);
+            const dy = Math.abs(row - centerY);
+            const distance = dx + dy;
+
+            // Normalize distance to range [0, 1]
+            const normalizedDistance = distance / maxDistance;
+
+            // Define weight: higher weight for cells closer to the center
+            // Using exponential decay: weight decreases exponentially as distance increases
+            const weight = Math.exp(-decayRate * normalizedDistance);
+
+            // Accumulate total weight
+            totalWeight += weight;
+
+            // If the cell passes, add its weight to weightedPass
+            if (passPartitions[row][col]) {
+                weightedPass += weight;
+            }
+        }
+    }
+
+    // Calculate the weighted score
+    const score = weightedPass / totalWeight;
+
+    // Clamp the score between 0 and 1
+    return Math.min(Math.max(score, 0), 1);
+}
+
+function computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4){
+    return Math.max(0.0, (w1 * scoreC1) + (w2 * scoreC2) + (w3 * scoreC3) - w4 * scoreC4);
+}
+
+function updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4) {
+    // Define thresholds for individual scores to display checkmarks
+    const thresholds = {
+        scoreC1: 1.0, // Example threshold for C1
+        scoreC2: 0.5, // Example threshold for C2
+        scoreC3: 0.1, // Example threshold for C3
+        scoreC4: 0.5  // Example threshold for C4
+    };
+
+    console.log(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+
+    // Helper function to determine pass/fail for a score
+    function getStatus(score, threshold) {
+        return score >= threshold ? '✅' : '❌';
+    }
+
+    // Create HTML content for the results
+    const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+    const resultsHTML = `
+        <h2>Validation Results</h2>
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Description</th>
+                    <th>Weight</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Score C1</td>
+                    <td>Isometric Coverage coverIsometric >= (coverOrthogonal * 0.8)</td>
+                    <td>${ w1 }</td>
+                    <td>${scoreC1.toFixed(2)}</td>
+                    <td>${getStatus(scoreC1, thresholds.scoreC1)}</td>
+                </tr>
+                <tr>
+                    <td>Score C2</td>
+                    <td>Isometric Coverage over Total Blacks (coverIsometric / totalBlacks)</td>
+                    <td>${ w2 }</td>
+                    <td>${scoreC2.toFixed(2)}</td>
+                    <td>${getStatus(scoreC2, thresholds.scoreC2)}</td>
+                </tr>
+                <tr>
+                    <td>Score C3</td>
+                    <td>Face Match Ratio (matches.length / 3)</td>
+                    <td>${ w3 }</td>
+                    <td>${scoreC3.toFixed(2)}</td>
+                    <td>${getStatus(scoreC3, thresholds.scoreC3)}</td>
+                </tr>
+                <tr>
+                    <td>Score C4</td>
+                    <td>Weighted Grid Score (computeWeightedScore)</td>
+                    <td>${ w4 }</td>
+                    <td>${scoreC4.toFixed(2)}</td>
+                    <td>${getStatus(scoreC4, thresholds.scoreC4)}</td>
+                </tr>
+                <tr>
+                    <td><strong>Total Score</strong></td>
+                    <td>Pass > 0.5</td>
+                    <td><strong>${totalScore.toFixed(2)}</strong></td>
+                    <td>${getStatus(totalScore, 0.5)}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+
+    // Update the results element with the generated HTML
+    results.innerHTML = resultsHTML;
+}
+
 async function processImage() {
-    isoCheckResult.textContent = '';
-    faceCheckResult.textContent = '';
+    results.textContent = '';
 
     if (!userImg) {
         isoCheckResult.textContent = 'No image loaded.';
@@ -716,8 +759,6 @@ async function processImage() {
     cameraContainer.style.height = `${userImg.height}px`;
 
     try {
-        // Load Mask
-        faceMaskImg = await loadImage('image/faceMaskBorder.jpg')
 
         // C) When processing is triggered,
         //    we get the cropping area from the draggable box position
@@ -755,12 +796,16 @@ async function processImage() {
             bwCtx.putImageData(bwData, 0, 0);
         }
 
+
+        // Load Masks for face detection
+        const faceMaskImg = await loadImage('image/faceMaskBorder.jpg')
+        const neckMaskImg = await loadImage('image/neckMaskBorder.jpg')
         const matches = [
             ...findFaceMatches(bwData, faceMaskImg, false),
             ...findFaceMatches(bwData, faceMaskImg, true),
+            ...findFaceMatches(bwData, neckMaskImg, false),
+            ...findFaceMatches(bwData, neckMaskImg, true),
         ]
-
-        faceCheckResult.textContent = matches.length === 0 ? 'No face found above threshold.' : `Found ${matches.length} face(s)`;
 
         // 1) Use 'findAllLineSegments' to detect lines
         const {
@@ -770,19 +815,40 @@ async function processImage() {
             coverOrthogonal,
             totalBlacks
         } = findAllLineSegments(bwData);
-        console.log(coverIsometric, coverOrthogonal);
-
-        // 2) Show how many lines we found
-        if (isometric.length === 0) {
-            isoCheckResult.textContent += `\nNo isometric lines.`;
-        } else {
-            isoCheckResult.textContent += `\nFound ${isometric.length} isometric line(s).`;
-        }
 
         // Render Debug!
         highlightLinesInColor(bwData, isometric, 0x00FF00);
         highlightLinesInColor(bwData, orthogonal, 0x0000FF);
         bwCtx.putImageData(bwData, 0, 0);
+
+        const gridCols = 7;
+        const gridRows = 9;
+
+        const partitions = partitionAndCountLines(isometric, orthogonal, outW, outH, gridCols, gridRows);
+
+        const passPartitions = partitions.map((row) => row.map(([isometric, orthogonal]) => isometric && (isometric >= orthogonal * 0.8)));
+        rectanglesCanvas.width = outW;
+        rectanglesCanvas.height = outH;
+
+        const cellWidth = Math.floor(outW / gridCols);
+        const cellHeight = Math.floor(outH / gridRows);    
+        for (let row = 0; row < gridRows; row++) {
+            for (let col = 0; col < gridCols; col++) {
+                // Determine the color based on the ratio
+                const color = passPartitions[row][col] ? 'green' : 'red';
+    
+                // Calculate the top-left corner of the current grid cell
+                const x = col * cellWidth;
+                const y = row * cellHeight;
+    
+                // Draw the rectangle with the determined color
+                rectanglesCtx.beginPath();
+                rectanglesCtx.rect(x, y, cellWidth, cellHeight);
+                rectanglesCtx.lineWidth = 2;
+                rectanglesCtx.fillStyle = color;
+                rectanglesCtx.fill();
+            }
+        }
 
         // Highlight face matches with red rectangles
         matches.forEach(m => {
@@ -795,22 +861,26 @@ async function processImage() {
         const {
             w1,
             w2,
-            w3
+            w3,
+            w4
         } = {
-            w1: 0.3,
-            w2: 0.3,
-            w3: 0.4
-        }; // Faces give more!
+            w1: 0.3, // ratio between isometric and orthogonal
+            w2: 0.3, // Isometric Lines Covering black
+            w3: 0.4, // Faces
+            w4: 0.2, // Penalty
+        };
 
         // Calculate individual scores
-        const scoreC1 = Math.min(coverIsometric / (coverOrthogonal * 0.9), 1); // Already a ratio between 0 and potentially >1
+        const scoreC1 = coverIsometric >= (coverOrthogonal * 0.8) ? 1 : 0; // Already a ratio between 0 and potentially >1
         const scoreC2 = coverIsometric / totalBlacks; // Ratio between 0 and 1
         const scoreC3 = Math.min(matches.length / 3, 1); // Ratio between 0 and 1
+        const scoreC4 = 1.0 - computeWeightedScore(passPartitions, gridCols, gridRows);
 
         // Calculate total score with weights
-        const totalScore = (w1 * scoreC1) + (w2 * scoreC2) + (w3 * scoreC3);
+        const totalScore = computeTotalScore(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
 
-        console.log(totalScore);
+        updateResultsDisplay(scoreC1, scoreC2, scoreC3, scoreC4, w1, w2, w3, w4);
+
         const isValidImage = totalScore >= 0.5;
 
         // Display the validation result
@@ -828,6 +898,6 @@ async function processImage() {
 
     } catch (err) {
         console.error(err);
-        isoCheckResult.textContent = 'Error: ' + err.message;
+        results.textContent = 'Error: ' + err.message;
     }
 }

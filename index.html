@@ -10,10 +10,10 @@
 
   <button id="case1" class="buttonCase">Case 1</button>
   <button id="case2" class="buttonCase">Case 2</button>
-  
-  <div class="form-container">
+  <button id="case3" class="buttonCase">Case 3</button>
 
-    <!-- User selects an image (same size as the mask) -->
+  <div class="form-container" style="display: none;">
+    User selects an image (same size as the mask)
     <label>
       Select an image:
       <input type="file" id="imageInput" accept="image/*" />
@@ -40,14 +40,17 @@
         <h3>Black and White Map</h3>
         <canvas id="bwCanvas"></canvas>
       </div>
+      <div>
+        <h3>Rectangles</h3>
+        <canvas id="rectanglesCanvas"></canvas>
+      </div>
     </div>
   </div>
 
   <!-- Results area (no alerts) -->
   <div class="section">
     <h3>Validation Results</h3>
-    <pre class="results" id="isoCheckResult"></pre>
-    <pre class="results" id="faceCheckResult"></pre>
+    <pre id="results"></pre>
   </div>
 
   <script src="main.js"></script>
